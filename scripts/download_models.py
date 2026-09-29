@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import os
 import shutil
 import tempfile
@@ -9,9 +10,24 @@ from pathlib import Path
 from huggingface_hub import hf_hub_download
 
 
-def download(repo: str, filename: str, revision: str, target: str) -> None:
+def sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(8 * 1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def download(
+    repo: str,
+    filename: str,
+    revision: str,
+    target: str,
+    expected_sha256: str | None = None,
+) -> None:
     target_path = Path(target)
     target_path.parent.mkdir(parents=True, exist_ok=True)
+
     with tempfile.TemporaryDirectory() as tmp:
         source = Path(
             hf_hub_download(
@@ -22,8 +38,21 @@ def download(repo: str, filename: str, revision: str, target: str) -> None:
                 token=os.getenv("HF_TOKEN") or None,
             )
         )
+
+        if expected_sha256:
+            actual = sha256_file(source)
+            if actual.lower() != expected_sha256.lower():
+                raise RuntimeError(
+                    f"SHA256 mismatch for {repo}:{filename}: "
+                    f"expected {expected_sha256}, got {actual}"
+                )
+
         shutil.move(str(source), target_path)
-    print(f"Downloaded {repo}@{revision}:{filename} -> {target_path}")
+
+    print(
+        f"Downloaded {repo}@{revision}:{filename} -> {target_path}"
+        + (f" (sha256={expected_sha256})" if expected_sha256 else "")
+    )
 
 
 def main() -> None:
@@ -32,8 +61,16 @@ def main() -> None:
     parser.add_argument("--file", required=True)
     parser.add_argument("--revision", default="main")
     parser.add_argument("--target", required=True)
+    parser.add_argument("--sha256")
     args = parser.parse_args()
-    download(args.repo, args.file, args.revision, args.target)
+
+    download(
+        repo=args.repo,
+        filename=args.file,
+        revision=args.revision,
+        target=args.target,
+        expected_sha256=args.sha256,
+    )
 
 
 if __name__ == "__main__":
