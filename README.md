@@ -11,7 +11,7 @@ The public API is intentionally compact. Clients send prompt/settings/reference 
 - Qwen3-VL INT8 text encoder: `Comfy-Org/Qwen-Image-2.1`
 - Qwen Image 2.1 BF16 VAE
 - ComfyUI with native Qwen Image 2.1 nodes
-- ComfyUI-GGUF
+- `leejet/ComfyUI-GGUF` pinned to a Qwen-Image-2.1-capable commit
 - Dynamic model-only LoRA chain from Network Volume
 - Viggle Qwen Image 2.1 Turbo v0.2.1, exact 6-step sigma schedule
 - T2I and image editing with up to 10 reference images
@@ -221,10 +221,26 @@ To build another GGUF quant:
 ```bash
 docker build --platform linux/amd64 \
   --build-arg QWEN_GGUF_FILE=qwen-image-2.1-Q5_K_M.gguf \
+  --build-arg QWEN_GGUF_SHA256=88ce8e90e5b959cce5e248f697d7f6c9c7ca5696c1eac64a10dadb041dd7fd07 \
   -t yourname/qwen21-gguf-runpod:q5 .
 ```
 
 Available 0xSojalSec variants currently include Q4_0, Q4_K_M, Q5_K_M, Q6_K and Q8_0. Q4_K_M is the model repository's recommended balance of size and quality.
+
+## Pinned model/runtime revisions
+
+The Docker build is intentionally reproducible and verifies the large model files before they are copied into the final image.
+
+| Component | Revision / checksum |
+|---|---|
+| `0xSojalSec/Qwen-Image-2.1-Uncensored-GGUF` | `242be4d1f70cc26fa45773c452f81980ed656e2e` |
+| Q4_K_M GGUF SHA256 | `833439e91bc1152d28f37aa198c7f6f4218b7de95754c2f7a318a2422ab4b2f8` |
+| ComfyUI | `73c9bad4d21e7addbe1d13bc92eee0f1431b017d` |
+| leejet/ComfyUI-GGUF | `373048b8403a7820620065210a691263d4da0a61` |
+| Comfy-Org Qwen components | `9a44dbdb47cefd046be9c0a13476192f34c8db8e` |
+| Viggle Turbo | `bb26a0f38e5fe6c124aaccc9187a87eed5d9ed13` |
+
+If you override the GGUF file at build time, also pass the matching `QWEN_GGUF_SHA256`.
 
 ## GitHub Container Registry
 
