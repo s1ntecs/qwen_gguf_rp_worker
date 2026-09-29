@@ -1,0 +1,14 @@
+{
+  "input": {
+    "prompt": "Change the jacket to dark green while preserving the person's identity, pose, framing and background.",
+    "images": [
+      "https://example.com/input.png"
+    ],
+    "steps": 25,
+    "cfg_scale": 1.0,
+    "seed": 42,
+    "turbo": false,
+    "loras": [],
+    "output_format": "png"
+  }
+}
