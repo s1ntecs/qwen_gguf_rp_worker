@@ -397,6 +397,33 @@ python tools/webui/server.py --port 9000 --endpoint <endpoint_id>
 
 The server reads `Authorization_RUNPOD` (or `RUNPOD_API_KEY`) and optionally `RUNPOD_ENDPOINT_ID` from `.env`, listens on loopback only and proxies `/run`, `/status`, `/cancel` and `/health`, so the API key never reaches the browser. Only the Python standard library is required.
 
+The UI starts with Turbo enabled for speed. Saved preferences override this preset; the API retains its existing non-Turbo default unless `"turbo": true` is supplied.
+
+## Verified deployment — 2026-10-02
+
+- Endpoint: `6kich2ygt0x3qt` (`qwen21-lora-vram-h100`).
+- Image: `sintecs/qwen_21_loras_rp_worker:v1.1.1-lora-vram`.
+- Published image index: `sha256:4105d504fa18afa539dc5949b402a979def86c50007e29a1125815ff1069af92`.
+- Observed GPU: NVIDIA H100 80GB HBM3, AP-IN-1.
+- Runtime: `--fast fp16_accumulation --highvram`; FlashBoot enabled, min 0 / max 1 active worker, idle timeout 300 seconds.
+- Defaults: NSFW 1, Penis 0, Vagina 0. All three adapters are preloaded onto the GPU.
+
+Eight real 1024×1024 portrait generations completed without errors on the same worker. Different seeds were used for repeated timing runs to avoid sampler-cache hits. Strength changes, all-zero strengths, all-three active adapters and restoration of defaults were exercised.
+
+| Case | Worker time | RunPod execution time |
+|---|---:|---:|
+| Turbo, defaults, warm worker (two seeds) | 3.37–3.57 s | 4.75–5.38 s |
+| Turbo, all three adapters active | 3.95 s | 5.13 s |
+| Turbo, changed strengths | 4.23 s | 5.19 s |
+| Turbo, all adapters disabled | 3.36 s | 4.35 s |
+| Standard, 25 steps (two seeds) | 9.32–9.39 s | 10.39–10.59 s |
+
+The first request waited 489.84 seconds for a completely new host to download and start the image, then took 12.78 seconds inside the worker (14.16 seconds RunPod execution time). Warm queue delays were 88–94 ms. These timing samples are not a latency guarantee, and retaining a warm worker differs from starting on a new host.
+
+Local results and PNGs are in `outputs/lora-vram-20261002/`; `benchmarks.json` records the measured cases. Prompts used a clothed adult portrait to verify inference and adapter switching. Anatomy quality and BF16-versus-GGUF visual quality were not benchmarked. Q4_K_M remains the deployed model; its measured warm speed is sufficient for this release, with Turbo approximately 2.6× faster inside the worker than 25-step generation.
+
+`Dockerfile.release` and its manual release workflow provide an incremental publication path from the earlier immutable base image, avoiding another download of the base HF model assets when only LoRAs or worker code change. The deployed image above was produced by the full Dockerfile.
+
 ## License
 
 The Qwen model is distributed under the Qwen Research License. Review the current model license before commercial deployment. This worker does not modify or expand the model license.
