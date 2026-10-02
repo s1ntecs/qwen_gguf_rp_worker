@@ -1,0 +1,28 @@
+# Incremental LoRA release on the previously deployed, immutable Qwen image.
+# The full Dockerfile remains available to rebuild the pinned base models.
+FROM sintecs/qwen_21_loras_rp_worker:fbc9892-lf@sha256:b65f652613def388e7397095f03764abd0cc67f4217b35fb34e562dcedf36d46
+
+ENV HF_HUB_DISABLE_XET=1
+
+RUN test "$(git -C /comfyui rev-parse HEAD)" = 73c9bad4d21e7addbe1d13bc92eee0f1431b017d \
+    && test "$(git -C /comfyui/custom_nodes/ComfyUI-GGUF rev-parse HEAD)" = 373048b8403a7820620065210a691263d4da0a61
+
+COPY scripts/patch_gguf_adapters.py scripts/download_models.py /app/scripts/
+COPY lora_catalog.py /app/lora_catalog.py
+RUN /opt/venv/bin/python /app/scripts/patch_gguf_adapters.py \
+      /comfyui/custom_nodes/ComfyUI-GGUF/ops.py \
+    && /opt/venv/bin/python /app/scripts/download_models.py \
+      --builtin-loras --target /comfyui/models/loras
+
+COPY custom_nodes/qwen_lora_manager.py /comfyui/custom_nodes/qwen_lora_manager.py
+COPY lora_catalog.py /comfyui/lora_catalog.py
+COPY handler.py workflow_builder.py extra_model_paths.yaml start.sh /app/
+
+RUN chmod +x /app/start.sh \
+    && cd /comfyui \
+    && timeout 300 /opt/venv/bin/python main.py --quick-test-for-ci --cpu \
+    && timeout 300 /opt/venv/bin/python -c \
+      'import comfy.options; comfy.options.enable_args_parsing(); import asyncio, nodes; asyncio.run(nodes.init_extra_nodes()); required = {"UnetLoaderGGUFAdvanced", "TextEncodeQwenImage21", "QwenBuiltinLoraStack", "ViggleTurboLora", "ViggleTurboSigmas"}; missing = required - nodes.NODE_CLASS_MAPPINGS.keys(); assert not missing, f"Required ComfyUI nodes failed to import: {sorted(missing)}"' --cpu
+
+WORKDIR /app
+CMD ["/app/start.sh"]
