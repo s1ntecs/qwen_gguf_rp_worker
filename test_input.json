@@ -8,6 +8,7 @@
     "cfg_scale": 1.0,
     "seed": 42,
     "turbo": false,
+    "lora_strengths": {"nsfw": 1, "penis": 0, "vagina": 0},
     "loras": [],
     "output_format": "png"
   }

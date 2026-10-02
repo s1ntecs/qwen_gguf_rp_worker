@@ -19,6 +19,7 @@ from PIL import Image, ImageOps
 from runpod.serverless.modules.rp_logger import RunPodLogger
 
 from workflow_builder import ModelConfig, build_workflow, normalize_loras
+from lora_catalog import BUILTIN_LORAS, resolve_lora_settings
 
 logger = RunPodLogger()
 
@@ -250,7 +251,9 @@ def handler(job: dict[str,Any]) -> dict[str,Any]:
         steps = int(data.get("steps", 25))
         cfg = float(data.get("cfg_scale", 1.0))
         turbo = bool(data.get("turbo", False))
-        loras = normalize_loras(data.get("loras", data.get("lora")))
+        lora_strengths, loras = resolve_lora_settings(
+            data.get("lora_strengths"), normalize_loras(data.get("loras", data.get("lora"))),
+        )
         fmt = str(data.get("output_format","png"))
         quality = int(data.get("quality",95))
         sources = collect_sources(data)
@@ -282,6 +285,7 @@ def handler(job: dict[str,Any]) -> dict[str,Any]:
             cfg_scale=cfg,
             seed=seed,
             loras=loras,
+            lora_strengths=lora_strengths,
             turbo=turbo,
             reference_resolution=int(data.get("reference_resolution",1024)),
             model=MODEL,
@@ -289,7 +293,8 @@ def handler(job: dict[str,Any]) -> dict[str,Any]:
         )
 
         wait_for_comfy()
-        logger.info(f"Qwen2.1 refs={len(image_names)} turbo={turbo} steps={actual_steps} loras={len(loras)} seed={seed}")
+        logger.info(f"Qwen2.1 refs={len(image_names)} turbo={turbo} steps={actual_steps} "
+                    f"lora_strengths={lora_strengths} extra_loras={len(loras)} seed={seed}")
         prompt_id = queue_workflow(workflow, token)
         record = wait_result(prompt_id)
         blobs, output_paths = fetch_outputs(record)
@@ -299,7 +304,12 @@ def handler(job: dict[str,Any]) -> dict[str,Any]:
             "steps": actual_steps,
             "seed": seed,
             "turbo": turbo,
-            "loras": loras,
+            "lora_strengths": lora_strengths,
+            "loras": [
+                {"name": asset.filename, "strength": lora_strengths[asset.key]}
+                for asset in BUILTIN_LORAS
+            ] + loras,
+            "model_file": MODEL.model_file,
         }
     except Exception as exc:
         logger.error(str(exc))

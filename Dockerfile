@@ -39,6 +39,9 @@ RUN git -C /comfyui fetch --depth 1 origin ${COMFYUI_COMMIT} \
     && git -C /comfyui/custom_nodes/ComfyUI-GGUF checkout --detach ${COMFYUI_GGUF_COMMIT}
 
 COPY requirements.txt /app/requirements.txt
+COPY scripts/patch_gguf_adapters.py /app/scripts/patch_gguf_adapters.py
+RUN /opt/venv/bin/python /app/scripts/patch_gguf_adapters.py \
+      /comfyui/custom_nodes/ComfyUI-GGUF/ops.py
 RUN uv pip install --python /opt/venv/bin/python \
       -r /comfyui/requirements.txt \
       -r /comfyui/custom_nodes/ComfyUI-GGUF/requirements.txt \
@@ -51,6 +54,7 @@ RUN mkdir -p \
       /comfyui/models/loras
 
 COPY scripts/download_models.py /app/scripts/download_models.py
+COPY lora_catalog.py /app/lora_catalog.py
 
 # Each large asset gets its own Docker layer for better build-cache reuse.
 RUN /opt/venv/bin/python /app/scripts/download_models.py \
@@ -86,12 +90,20 @@ RUN /opt/venv/bin/python /app/scripts/download_models.py \
       --file "comfyui/viggle_turbo.py" \
       --target "/comfyui/custom_nodes/viggle_turbo.py"
 
+RUN /opt/venv/bin/python /app/scripts/download_models.py \
+      --builtin-loras \
+      --target /comfyui/models/loras
+
+COPY custom_nodes/qwen_lora_manager.py /comfyui/custom_nodes/qwen_lora_manager.py
+COPY lora_catalog.py /comfyui/lora_catalog.py
 COPY handler.py workflow_builder.py extra_model_paths.yaml start.sh /app/
 
 # Fail the build early if ComfyUI or custom nodes cannot import.
 RUN chmod +x /app/start.sh \
     && cd /comfyui \
-    && timeout 300 /opt/venv/bin/python main.py --quick-test-for-ci --cpu
+    && timeout 300 /opt/venv/bin/python main.py --quick-test-for-ci --cpu \
+    && timeout 300 /opt/venv/bin/python -c \
+      'import comfy.options; comfy.options.enable_args_parsing(); import asyncio, nodes; asyncio.run(nodes.init_extra_nodes()); required = {"UnetLoaderGGUFAdvanced", "TextEncodeQwenImage21", "QwenBuiltinLoraStack", "ViggleTurboLora", "ViggleTurboSigmas"}; missing = required - nodes.NODE_CLASS_MAPPINGS.keys(); assert not missing, f"Required ComfyUI nodes failed to import: {sorted(missing)}"' --cpu
 
 WORKDIR /app
 CMD ["/app/start.sh"]

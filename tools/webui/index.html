@@ -1,0 +1,684 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Qwen 2.1 тест-стенд</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --stage: #474747;
+  --panel: #2e2e2e;
+  --field: #262626;
+  --line: #3d3d3d;
+  --text: #ececec;
+  --muted: #a6a6a6;
+  --amber: #f2b134;
+  --amber-ink: #2a1f05;
+  --ok: #8fcf8a;
+  --err: #f07167;
+  --r-sm: 6px;
+  --r-md: 10px;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  background: var(--panel);
+  color: var(--text);
+  font: 14px/1.45 "Golos Text", system-ui, sans-serif;
+  font-variant-numeric: tabular-nums;
+}
+button, input, select, textarea { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
+
+.app {
+  display: grid;
+  grid-template-columns: 380px minmax(0, 1fr) 132px;
+  grid-template-rows: auto minmax(0, 1fr);
+  height: 100vh;
+}
+.statusbar {
+  grid-column: 1 / -1;
+  display: flex; align-items: center; gap: 20px; flex-wrap: wrap;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--line);
+  color: var(--muted);
+}
+.statusbar strong { color: var(--text); font-weight: 600; }
+.statusbar .title { color: var(--text); font-weight: 600; margin-right: auto; }
+.dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); margin-right: 6px; vertical-align: 1px; }
+.dot.live { background: var(--ok); }
+.dot.busy { background: var(--amber); }
+.dot.bad { background: var(--err); }
+
+/* Controls */
+.controls {
+  display: flex; flex-direction: column;
+  border-right: 1px solid var(--line);
+  min-height: 0;
+}
+.controls form { overflow-y: auto; padding: 16px; display: grid; gap: 18px; flex: 1; }
+.group { display: grid; gap: 8px; }
+.group > label, .group > .label { font-weight: 500; }
+.hint { color: var(--muted); font-size: 12.5px; }
+textarea, input[type=text], input[type=number], input[type=url], select {
+  width: 100%;
+  background: var(--field);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  padding: 8px 10px;
+}
+textarea { resize: vertical; min-height: 92px; }
+#prompt { min-height: 132px; }
+.row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.row.two { grid-template-columns: 1fr 1fr; }
+.field { display: grid; gap: 4px; }
+.field span { color: var(--muted); font-size: 12.5px; }
+.inline { display: flex; gap: 6px; }
+.inline input { flex: 1; min-width: 0; }
+
+.seg { display: flex; flex-wrap: wrap; gap: 4px; }
+.seg button {
+  background: var(--field); border: 1px solid var(--line); border-radius: var(--r-sm);
+  padding: 5px 9px; cursor: pointer; color: var(--muted);
+}
+.seg button[aria-pressed=true] { color: var(--text); border-color: var(--text); }
+
+.btn {
+  background: var(--field); border: 1px solid var(--line); border-radius: var(--r-sm);
+  padding: 7px 12px; cursor: pointer;
+}
+.btn:hover { border-color: var(--muted); }
+.btn.icon { padding: 7px 10px; }
+.btn:disabled { opacity: .45; cursor: default; }
+
+.toggle { display: flex; align-items: center; gap: 10px; cursor: pointer; }
+.toggle input { width: 18px; height: 18px; accent-color: var(--amber); }
+
+.drop {
+  border: 1px dashed var(--line); border-radius: var(--r-md);
+  padding: 14px; text-align: center; color: var(--muted); cursor: pointer;
+}
+.drop.over { border-color: var(--amber); color: var(--text); }
+.refs { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+.refs:empty { display: none; }
+.ref { position: relative; aspect-ratio: 1; border-radius: var(--r-sm); overflow: hidden; background: var(--field); }
+.ref img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.ref .n { position: absolute; left: 4px; bottom: 3px; font-size: 11px; background: rgba(0,0,0,.6); padding: 0 5px; border-radius: 4px; }
+.ref button {
+  position: absolute; right: 3px; top: 3px; width: 20px; height: 20px; border: 0; border-radius: 50%;
+  background: rgba(0,0,0,.7); cursor: pointer; line-height: 20px; padding: 0;
+}
+
+.lora { display: grid; grid-template-columns: 1fr 72px auto; gap: 6px; }
+details > summary { cursor: pointer; font-weight: 500; }
+details[open] > summary { margin-bottom: 10px; }
+
+.runbar {
+  padding: 12px 16px; border-top: 1px solid var(--line);
+  display: grid; gap: 6px;
+}
+.run {
+  background: var(--amber); color: var(--amber-ink); border: 0; border-radius: var(--r-md);
+  padding: 11px; font-weight: 600; cursor: pointer; font-size: 15px;
+}
+.run:hover { filter: brightness(1.06); }
+.run:disabled { opacity: .5; cursor: default; }
+.runbar .hint { display: flex; justify-content: space-between; }
+.warn { color: var(--err); }
+
+/* Stage */
+.stage {
+  background: var(--stage);
+  display: grid; grid-template-rows: auto minmax(0, 1fr) auto;
+  min-height: 0; min-width: 0;
+}
+.stage-head { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 10px; padding: 12px 16px; min-height: 52px; }
+.stage-head .btn { white-space: nowrap; }
+.stage-head .hint { white-space: nowrap; }
+.stage-head .state { font-weight: 600; }
+.stage-head .spacer { flex: 1; }
+.canvas { display: grid; grid-template: minmax(0, 1fr) / minmax(0, 1fr); place-items: center; padding: 8px 16px; min-height: 0; overflow: auto; }
+.canvas > img { max-width: 100%; max-height: 100%; width: auto; height: auto; object-fit: contain; display: block; box-shadow: 0 2px 24px rgba(0,0,0,.35); }
+.canvas .multi img { max-width: 100%; display: block; }
+.canvas .multi { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; width: 100%; }
+.empty { max-width: 380px; text-align: center; color: #d6d6d6; }
+.empty p { margin: 6px 0; }
+.error-box {
+  max-width: 640px; background: rgba(0,0,0,.25); border-left: 3px solid var(--err);
+  padding: 12px 14px; border-radius: var(--r-sm); white-space: pre-wrap; word-break: break-word;
+}
+.pulse { width: 56px; height: 56px; border-radius: 50%; border: 3px solid rgba(255,255,255,.15); border-top-color: var(--amber); animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .pulse { animation: none; border-color: var(--amber); } }
+
+.meta { display: flex; flex-wrap: wrap; gap: 4px 18px; padding: 10px 16px 4px; color: #dcdcdc; }
+.meta span b { color: #fff; font-weight: 600; }
+.stage-foot { padding: 0 16px 12px; }
+.stage-foot details { background: rgba(0,0,0,.18); border-radius: var(--r-sm); padding: 8px 12px; }
+.stage-foot pre { margin: 0; max-height: 260px; overflow: auto; font-size: 12px; white-space: pre-wrap; word-break: break-all; }
+
+/* History */
+.history { border-left: 1px solid var(--line); overflow-y: auto; padding: 10px 8px; display: grid; gap: 8px; align-content: start; }
+.history .hint { text-align: center; }
+.thumb {
+  position: relative; width: 100%; aspect-ratio: 1; border-radius: var(--r-sm); overflow: hidden;
+  background: var(--field); border: 2px solid transparent; cursor: pointer; padding: 0;
+}
+.thumb[aria-current=true] { border-color: var(--text); }
+.thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.thumb .st { position: absolute; left: 5px; bottom: 5px; }
+.thumb .ph { display: grid; place-items: center; height: 100%; color: var(--muted); font-size: 12px; }
+
+@media (max-width: 1000px) {
+  .app { grid-template-columns: 1fr; grid-template-rows: auto; height: auto; }
+  .controls { border-right: 0; border-bottom: 1px solid var(--line); }
+  .controls form { overflow: visible; }
+  .stage { min-height: 70vh; }
+  .history { border-left: 0; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); }
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="statusbar">
+    <span class="title">Тест-стенд Qwen Image 2.1</span>
+    <span id="hEndpoint"><span class="dot"></span>RunPod: проверяю…</span>
+    <span>Свободно <strong id="hIdle">–</strong></span>
+    <span>Работают <strong id="hRunning">–</strong></span>
+    <span>В очереди <strong id="hQueue">–</strong></span>
+  </header>
+
+  <section class="controls">
+    <form id="form" autocomplete="off">
+      <div class="group">
+        <label for="prompt">Промпт</label>
+        <textarea id="prompt" placeholder="Что сгенерировать или как изменить референс"></textarea>
+      </div>
+
+      <div class="group">
+        <span class="label">Референсы</span>
+        <div class="drop" id="drop" tabindex="0" role="button">Перетащите картинки или нажмите, чтобы выбрать. До 10 штук.</div>
+        <input type="file" id="file" accept="image/*" multiple hidden>
+        <div class="inline">
+          <input type="url" id="refUrl" placeholder="или ссылка на картинку">
+          <button class="btn" type="button" id="addUrl">Добавить</button>
+        </div>
+        <div class="refs" id="refs"></div>
+        <div class="hint">В промпте на них можно ссылаться как &lt;image1&gt;, &lt;image2&gt;…</div>
+      </div>
+
+      <div class="group">
+        <span class="label">Размер</span>
+        <div class="seg" id="sizes"></div>
+        <div class="row two" id="customSize" hidden>
+          <label class="field"><span>Ширина</span><input type="number" id="width" min="256" max="2048" step="32" value="1024"></label>
+          <label class="field"><span>Высота</span><input type="number" id="height" min="256" max="2048" step="32" value="1024"></label>
+        </div>
+      </div>
+
+      <label class="toggle"><input type="checkbox" id="turbo"> Turbo: 6 шагов с Viggle LoRA</label>
+
+      <div class="row">
+        <label class="field"><span>Шаги</span><input type="number" id="steps" min="1" max="100" value="25"></label>
+        <label class="field"><span>CFG</span><input type="number" id="cfg" min="0" max="20" step="0.1" value="1.0"></label>
+        <label class="field"><span>Seed</span>
+          <div class="inline"><input type="number" id="seed" placeholder="случайный" min="0"><button class="btn icon" type="button" id="dice" title="Случайный seed" aria-label="Случайный seed"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" style="display:block"><rect x="1.5" y="1.5" width="13" height="13" rx="3" fill="none" stroke="currentColor" stroke-width="1.4"/><circle cx="5" cy="5" r="1.3" fill="currentColor"/><circle cx="8" cy="8" r="1.3" fill="currentColor"/><circle cx="11" cy="11" r="1.3" fill="currentColor"/></svg></button></div>
+        </label>
+      </div>
+
+      <div class="group">
+        <span class="label">Встроенные LoRA · сила</span>
+        <div class="row">
+          <label class="field"><span>NSFW</span><input type="number" id="loraNsfw" min="-4" max="4" step="0.05" value="1" required></label>
+          <label class="field"><span>Penis</span><input type="number" id="loraPenis" min="-4" max="4" step="0.05" value="0" required></label>
+          <label class="field"><span>Vagina</span><input type="number" id="loraVagina" min="-4" max="4" step="0.05" value="0" required></label>
+        </div>
+        <div class="hint">0 — выключена. По умолчанию: NSFW 1, Penis 0, Vagina 0.</div>
+        <div><button class="btn" type="button" id="resetLoras">Вернуть силы по умолчанию</button></div>
+      </div>
+
+      <div class="group">
+        <span class="label">Дополнительные LoRA</span>
+        <div id="loras" class="group"></div>
+        <div><button class="btn" type="button" id="addLora">Добавить LoRA</button></div>
+        <div class="hint">Имя файла из /runpod-volume/models/loras. Для встроенных LoRA volume не нужен.</div>
+      </div>
+
+      <details>
+        <summary>Дополнительно</summary>
+        <div class="group">
+          <label for="negative">Негативный промпт</label>
+          <textarea id="negative" placeholder="Работает при CFG больше 1"></textarea>
+        </div>
+        <div class="row" style="margin-top:10px">
+          <label class="field"><span>Формат</span>
+            <select id="format"><option value="png">PNG</option><option value="jpeg">JPEG</option><option value="webp">WebP</option></select>
+          </label>
+          <label class="field"><span>Качество</span><input type="number" id="quality" min="1" max="100" value="95"></label>
+          <label class="field"><span>Разрешение реф.</span><input type="number" id="refRes" min="256" max="2048" step="32" value="1024"></label>
+        </div>
+      </details>
+    </form>
+    <div class="runbar">
+      <button class="run" id="run" type="button">Сгенерировать</button>
+      <div class="hint"><span>Ctrl + Enter</span><span id="payloadSize"></span></div>
+    </div>
+  </section>
+
+  <main class="stage">
+    <div class="stage-head" id="stageHead"></div>
+    <div class="canvas" id="canvas">
+      <div class="empty">
+        <p><strong>Здесь появится результат</strong></p>
+        <p>Напишите промпт и нажмите «Сгенерировать». Можно запускать несколько задач подряд — они появятся в ленте справа.</p>
+      </div>
+    </div>
+    <div>
+      <div class="meta" id="meta"></div>
+      <div class="stage-foot" id="foot"></div>
+    </div>
+  </main>
+
+  <aside class="history" id="history" aria-label="История запусков">
+    <div class="hint">Запусков пока нет</div>
+  </aside>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const SIZES = [
+  { key: "auto", label: "Как у референса" },
+  { key: "1024x1024", label: "1:1", w: 1024, h: 1024 },
+  { key: "768x1024", label: "3:4", w: 768, h: 1024 },
+  { key: "1024x768", label: "4:3", w: 1024, h: 768 },
+  { key: "720x1280", label: "9:16", w: 736, h: 1280 },
+  { key: "1280x720", label: "16:9", w: 1280, h: 736 },
+  { key: "custom", label: "Свой" },
+];
+const MAX_REFS = 10;
+const BUILTIN_LORAS = [
+  { key: "nsfw", id: "loraNsfw", name: "NSFW Qwen by TheseAlpacas V2.safetensors", strength: 1 },
+  { key: "penis", id: "loraPenis", name: "qwen-image-2.1_penis_coachbate_preview1.safetensors", strength: 0 },
+  { key: "vagina", id: "loraVagina", name: "qwen21_v2_000002750.safetensors", strength: 0 },
+];
+const RUNPOD_LIMIT = 10 * 1024 * 1024;
+const FINAL = ["COMPLETED", "FAILED", "CANCELLED", "TIMED_OUT"];
+const STATE_RU = { IN_QUEUE: "В очереди", IN_PROGRESS: "Генерация", COMPLETED: "Готово", FAILED: "Ошибка", CANCELLED: "Отменено", TIMED_OUT: "Тайм-аут", SUBMITTING: "Отправляю" };
+
+let refs = [];          // {src, name}
+let size = "1024x1024";
+let jobs = [];          // newest first
+let selectedId = null;
+
+/* ---------- storage (per-viewer convenience only) ---------- */
+function saveForm() {
+  try {
+    localStorage.setItem("qwen21-form", JSON.stringify({
+      prompt: $("prompt").value, negative: $("negative").value, size,
+      width: $("width").value, height: $("height").value, turbo: $("turbo").checked,
+      steps: $("steps").value, cfg: $("cfg").value, format: $("format").value,
+      quality: $("quality").value, refRes: $("refRes").value, loras: readLoras(),
+      loraStrengths: readLoraStrengths(),
+    }));
+  } catch (e) {}
+}
+function restoreForm() {
+  let s = null;
+  try { s = JSON.parse(localStorage.getItem("qwen21-form") || "null"); } catch (e) {}
+  if (s) applyParams(s);
+}
+
+/* ---------- size presets ---------- */
+function renderSizes() {
+  $("sizes").innerHTML = "";
+  for (const s of SIZES) {
+    const b = document.createElement("button");
+    b.type = "button"; b.textContent = s.label;
+    b.setAttribute("aria-pressed", String(s.key === size));
+    b.onclick = () => { size = s.key; renderSizes(); updatePayloadSize(); saveForm(); };
+    $("sizes").appendChild(b);
+  }
+  $("customSize").hidden = size !== "custom";
+}
+function sizeValues() {
+  if (size === "auto") return refs.length ? {} : { width: 1024, height: 1024 };
+  if (size === "custom") return { width: +$("width").value, height: +$("height").value };
+  const s = SIZES.find((x) => x.key === size);
+  return { width: s.w, height: s.h };
+}
+
+/* ---------- references ---------- */
+function renderRefs() {
+  const box = $("refs");
+  box.innerHTML = "";
+  refs.forEach((r, i) => {
+    const d = document.createElement("div");
+    d.className = "ref";
+    d.innerHTML = `<img alt=""><span class="n">image${i + 1}</span><button type="button" aria-label="Убрать">×</button>`;
+    d.querySelector("img").src = r.src;
+    d.querySelector("button").onclick = () => { refs.splice(i, 1); renderRefs(); };
+    box.appendChild(d);
+  });
+  $("drop").style.display = refs.length >= MAX_REFS ? "none" : "";
+  updatePayloadSize();
+}
+function loadImage(src) {
+  return new Promise((ok, fail) => { const i = new Image(); i.onload = () => ok(i); i.onerror = fail; i.src = src; });
+}
+async function fileToRef(file) {
+  const raw = await new Promise((ok, fail) => { const fr = new FileReader(); fr.onload = () => ok(fr.result); fr.onerror = fail; fr.readAsDataURL(file); });
+  const img = await loadImage(raw);
+  const maxSide = Math.max(img.naturalWidth, img.naturalHeight);
+  // RunPod rejects /run bodies above 10 MB: shrink big uploads before sending.
+  if (file.size < 1.5 * 1024 * 1024 && maxSide <= 2048) return { src: raw, name: file.name };
+  const k = Math.min(1, 2048 / maxSide);
+  const c = document.createElement("canvas");
+  c.width = Math.round(img.naturalWidth * k); c.height = Math.round(img.naturalHeight * k);
+  c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+  return { src: c.toDataURL("image/jpeg", 0.93), name: file.name };
+}
+async function addFiles(files) {
+  for (const f of files) {
+    if (refs.length >= MAX_REFS) break;
+    if (!f.type.startsWith("image/")) continue;
+    refs.push(await fileToRef(f));
+  }
+  renderRefs();
+}
+function addRefSrc(src, name) {
+  if (refs.length >= MAX_REFS) return;
+  refs.push({ src, name }); renderRefs();
+}
+
+/* ---------- LoRAs ---------- */
+function addLoraRow(name = "", strength = 1) {
+  const row = document.createElement("div");
+  row.className = "lora";
+  row.innerHTML = `<input type="text" placeholder="realism.safetensors" aria-label="Файл LoRA"><input type="number" step="0.05" min="-4" max="4" aria-label="Сила"><button class="btn icon" type="button" aria-label="Убрать LoRA">×</button>`;
+  row.children[0].value = name; row.children[1].value = strength;
+  row.children[2].onclick = () => { row.remove(); saveForm(); };
+  $("loras").appendChild(row);
+}
+function readLoras() {
+  return [...$("loras").children].map((r) => ({ name: r.children[0].value.trim(), strength: r.children[1].value === "" ? 1 : Number(r.children[1].value) }))
+    .filter((l) => l.name);
+}
+function readLoraStrengths() {
+  return Object.fromEntries(BUILTIN_LORAS.map((l) => [l.key, Number($(l.id).value)]));
+}
+
+/* ---------- request ---------- */
+function buildInput() {
+  const input = {
+    prompt: $("prompt").value.trim(),
+    cfg_scale: parseFloat($("cfg").value),
+    turbo: $("turbo").checked,
+    output_format: $("format").value,
+    quality: +$("quality").value,
+    reference_resolution: +$("refRes").value,
+    lora_strengths: readLoraStrengths(),
+    ...sizeValues(),
+  };
+  if (!input.turbo) input.steps = +$("steps").value;
+  if ($("seed").value !== "") input.seed = +$("seed").value;
+  const neg = $("negative").value.trim();
+  if (neg) input.negative_prompt = neg;
+  const loras = readLoras();
+  if (loras.length) input.loras = loras;
+  if (refs.length) input.images = refs.map((r) => r.src);
+  return input;
+}
+function updatePayloadSize() {
+  const bytes = new Blob([JSON.stringify({ input: buildInput() })]).size;
+  const el = $("payloadSize");
+  el.textContent = `Запрос ${(bytes / 1024 / 1024).toFixed(2)} МБ`;
+  el.className = bytes > RUNPOD_LIMIT * 0.95 ? "warn" : "";
+  $("steps").disabled = $("turbo").checked;
+}
+function applyParams(p) {
+  if (p.prompt !== undefined) $("prompt").value = p.prompt;
+  if (p.negative !== undefined) $("negative").value = p.negative;
+  if (p.size) size = p.size;
+  for (const [id, key] of [["width","width"],["height","height"],["steps","steps"],["cfg","cfg"],["format","format"],["quality","quality"],["refRes","refRes"]]) {
+    if (p[key] !== undefined) $(id).value = p[key];
+  }
+  if (p.turbo !== undefined) $("turbo").checked = p.turbo;
+  const strengths = p.loraStrengths || {};
+  for (const l of BUILTIN_LORAS) $(l.id).value = strengths[l.key] ?? l.strength;
+  if (p.loras) {
+    $("loras").innerHTML = "";
+    for (const l of p.loras) {
+      const builtin = BUILTIN_LORAS.find((b) => b.name === l.name);
+      if (builtin) {
+        if (strengths[builtin.key] === undefined) $(builtin.id).value = l.strength;
+      } else addLoraRow(l.name, l.strength);
+    }
+  }
+  renderSizes(); updatePayloadSize();
+}
+function inputToParams(input) {
+  const known = SIZES.find((s) => s.w === input.width && s.h === input.height);
+  return {
+    prompt: input.prompt, negative: input.negative_prompt || "", turbo: !!input.turbo,
+    steps: input.steps ?? $("steps").value, cfg: input.cfg_scale, format: input.output_format,
+    quality: input.quality, refRes: input.reference_resolution, loras: input.loras || [],
+    loraStrengths: input.lora_strengths,
+    size: input.width === undefined ? "auto" : known ? known.key : "custom",
+    width: input.width, height: input.height,
+  };
+}
+
+/* ---------- API ---------- */
+async function api(method, path, body) {
+  const r = await fetch(path, {
+    method, headers: { "Content-Type": "application/json" }, body: body ? JSON.stringify(body) : undefined,
+    signal: AbortSignal.timeout(method === "GET" ? 35000 : 120000),
+  });
+  let data = null;
+  try { data = await r.json(); } catch (e) { data = { error: `Сервер вернул ${r.status} без JSON` }; }
+  if (!r.ok) throw Object.assign(new Error(data.detail || data.error || `HTTP ${r.status}`), { data, status: r.status });
+  return data;
+}
+
+async function submit() {
+  if (!$("form").reportValidity()) return;
+  const input = buildInput();
+  if (!input.prompt) { $("prompt").focus(); $("prompt").placeholder = "Промпт обязателен"; return; }
+  saveForm();
+  const job = { localId: crypto.randomUUID(), id: null, status: "SUBMITTING", input, startedAt: Date.now(), response: null, images: [], error: null };
+  jobs.unshift(job); select(job.localId);
+  try {
+    const r = await api("POST", "/api/run", { input });
+    job.id = r.id; job.status = r.status || "IN_QUEUE";
+  } catch (e) {
+    job.status = "FAILED"; job.error = e.status === 409 ? `Endpoint на паузе: включите воркеров (workersMax > 0) в RunPod.\n\n${e.message}` : e.message;
+    job.response = e.data;
+  }
+  render();
+  if (job.id) poll(job);
+}
+
+// Background tabs throttle timers hard; coming back to the tab wakes every poller at once.
+let wakers = [];
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState !== "visible") return;
+  const w = wakers; wakers = []; w.forEach((fn) => fn());
+  health();
+});
+function nap(ms) {
+  return new Promise((resolve) => {
+    const done = () => { clearTimeout(t); wakers = wakers.filter((f) => f !== done); resolve(); };
+    const t = setTimeout(done, ms);
+    wakers.push(done);
+  });
+}
+
+async function poll(job) {
+  while (!FINAL.includes(job.status)) {
+    await nap(1500);
+    try {
+      const st = await api("GET", `/api/status/${job.id}`);
+      job.status = st.status; job.delay = st.delayTime; job.exec = st.executionTime;
+      if (FINAL.includes(st.status)) {
+        const out = st.output;
+        job.response = st;
+        if (out && out.images_base64) {
+          const mime = { png: "image/png", jpeg: "image/jpeg", webp: "image/webp" }[job.input.output_format] || "image/png";
+          job.images = out.images_base64.map((b) => `data:${mime};base64,${b}`);
+          job.meta = out;
+        } else if (out && out.error) {
+          job.status = "FAILED"; job.error = out.error;
+        } else if (st.status !== "COMPLETED") {
+          job.error = st.error || `Задача завершилась со статусом ${st.status}`;
+        }
+        job.finishedAt = Date.now();
+      }
+      job.netError = null;
+    } catch (e) {
+      job.netError = e.name === "TimeoutError" ? "RunPod не ответил за 35 с, повторяю" : e.message;
+    }
+    render();
+  }
+}
+
+async function cancel(job) {
+  try { await api("POST", `/api/cancel/${job.id}`); } catch (e) { job.netError = e.message; }
+}
+
+async function health() {
+  const el = $("hEndpoint");
+  try {
+    const h = await api("GET", "/api/health");
+    const w = h.workers || {}, j = h.jobs || {};
+    $("hIdle").textContent = w.idle ?? 0;
+    $("hRunning").textContent = w.running ?? 0;
+    $("hQueue").textContent = (j.inQueue ?? 0) + (j.inProgress ? ` + ${j.inProgress} в работе` : "");
+    const busy = (w.running || 0) + (j.inProgress || 0) > 0;
+    el.innerHTML = `<span class="dot ${busy ? "busy" : "live"}"></span>RunPod на связи`;
+  } catch (e) {
+    el.innerHTML = `<span class="dot bad"></span>RunPod недоступен: ${escapeHtml(e.message)}`;
+  }
+}
+
+/* ---------- rendering ---------- */
+function escapeHtml(s) { return String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
+function secs(ms) { return ms == null ? "–" : `${(ms / 1000).toFixed(1)} с`; }
+function select(localId) { selectedId = localId; render(); }
+
+function render() {
+  renderHistory();
+  const job = jobs.find((j) => j.localId === selectedId);
+  const head = $("stageHead"), canvas = $("canvas"), meta = $("meta"), foot = $("foot");
+  if (!job) return;
+  const running = !FINAL.includes(job.status);
+  const elapsed = ((job.finishedAt || Date.now()) - job.startedAt);
+  head.innerHTML = `<span class="dot ${running ? "busy" : job.status === "COMPLETED" ? "live" : "bad"}"></span>
+    <span class="state">${STATE_RU[job.status] || job.status}</span><span class="hint" id="elapsed">${secs(elapsed)}</span>
+    <span class="spacer"></span>`;
+  const actions = [];
+  if (running && job.id) actions.push(["Отменить", () => cancel(job)]);
+  if (job.images.length) {
+    actions.push(["Скачать", () => job.images.forEach((src, i) => download(src, `qwen21_${job.meta?.seed ?? "x"}_${i}.${job.input.output_format}`))]);
+    actions.push(["В референсы", () => job.images.forEach((src) => addRefSrc(src, "result"))]);
+  }
+  actions.push(["Вернуть параметры", () => { applyParams(inputToParams(job.input)); $("seed").value = job.meta?.seed ?? job.input.seed ?? ""; refs = (job.input.images || []).map((src, i) => ({ src, name: `ref${i + 1}` })); renderRefs(); }]);
+  if (job.meta?.seed != null) actions.push(["Повторить с новым seed", () => { applyParams(inputToParams(job.input)); $("seed").value = ""; refs = (job.input.images || []).map((src) => ({ src })); renderRefs(); submit(); }]);
+  for (const [label, fn] of actions) {
+    const b = document.createElement("button"); b.className = "btn"; b.type = "button"; b.textContent = label; b.onclick = fn; head.appendChild(b);
+  }
+
+  if (job.images.length === 1) {
+    canvas.innerHTML = `<img alt="Результат генерации">`; canvas.querySelector("img").src = job.images[0];
+  } else if (job.images.length > 1) {
+    canvas.innerHTML = `<div class="multi"></div>`;
+    job.images.forEach((src) => { const i = new Image(); i.src = src; i.alt = "Результат"; canvas.firstChild.appendChild(i); });
+  } else if (job.error) {
+    canvas.innerHTML = `<div class="error-box"></div>`; canvas.firstChild.textContent = job.error;
+  } else {
+    const note = job.status === "IN_QUEUE" ? "Ждём свободный воркер. Холодный старт может занять несколько минут." : job.status === "IN_PROGRESS" ? "Воркер генерирует картинку." : "Отправляю задачу…";
+    canvas.innerHTML = `<div class="empty"><div class="pulse" style="margin:0 auto 14px"></div><p>${note}</p>${job.netError ? `<p class="warn">Нет связи: ${escapeHtml(job.netError)}</p>` : ""}</div>`;
+  }
+
+  const m = job.meta || {};
+  const bits = [
+    ["Seed", m.seed ?? job.input.seed ?? "случайный"],
+    ["Шаги", m.steps ?? (job.input.turbo ? 6 : job.input.steps)],
+    ["Turbo", job.input.turbo ? "да" : "нет"],
+    ["Размер", job.input.width ? `${job.input.width}×${job.input.height}` : "по референсу"],
+    ["Очередь", secs(job.delay)], ["Выполнение", secs(job.exec)], ["Воркер", m.time != null ? `${m.time} с` : "–"],
+    ["Референсов", (job.input.images || []).length],
+  ];
+  if ((job.input.loras || []).length) bits.push(["LoRA", job.input.loras.map((l) => `${l.name} ${l.strength}`).join(", ")]);
+  const builtinStrengths = m.lora_strengths || job.input.lora_strengths;
+  if (builtinStrengths) bits.push(["Встроенные LoRA", Object.entries(builtinStrengths).map(([name, strength]) => `${name} ${strength}`).join(", ")]);
+  meta.innerHTML = bits.map(([k, v]) => `<span>${k} <b>${escapeHtml(v)}</b></span>`).join("");
+
+  const shortInput = { ...job.input, images: (job.input.images || []).map((s) => `${s.slice(0, 40)}… (${Math.round(s.length / 1024)} КБ)`) };
+  const shortResp = job.response ? JSON.parse(JSON.stringify(job.response, (k, v) => k === "images_base64" ? v.map((b) => `<${Math.round(b.length / 1024)} КБ base64>`) : v)) : null;
+  const openState = foot.querySelector("details")?.open ? " open" : "";
+  foot.innerHTML = `<details${openState}><summary>JSON запроса и ответа${job.id ? `, задача ${escapeHtml(job.id)}` : ""}</summary><pre></pre></details>`;
+  foot.querySelector("pre").textContent = `// запрос\n${JSON.stringify({ input: shortInput }, null, 2)}\n\n// ответ\n${JSON.stringify(shortResp, null, 2)}`;
+}
+
+function renderHistory() {
+  const box = $("history");
+  if (!jobs.length) return;
+  box.innerHTML = "";
+  for (const job of jobs) {
+    const b = document.createElement("button");
+    b.className = "thumb"; b.type = "button";
+    b.setAttribute("aria-current", String(job.localId === selectedId));
+    b.title = job.input.prompt;
+    const running = !FINAL.includes(job.status);
+    const dot = `<span class="st dot ${running ? "busy" : job.status === "COMPLETED" ? "live" : "bad"}"></span>`;
+    b.innerHTML = job.images[0] ? `<img alt="">${dot}` : `<span class="ph">${STATE_RU[job.status] || job.status}</span>${dot}`;
+    if (job.images[0]) b.querySelector("img").src = job.images[0];
+    b.onclick = () => select(job.localId);
+    box.appendChild(b);
+  }
+}
+
+function download(src, name) {
+  const a = document.createElement("a"); a.href = src; a.download = name; a.click();
+}
+
+/* ---------- wiring ---------- */
+$("run").onclick = submit;
+document.addEventListener("keydown", (e) => { if ((e.ctrlKey || e.metaKey) && e.key === "Enter") submit(); });
+$("dice").onclick = () => { $("seed").value = Math.floor(Math.random() * 2 ** 31); };
+$("addLora").onclick = () => addLoraRow();
+$("resetLoras").onclick = () => {
+  for (const l of BUILTIN_LORAS) $(l.id).value = l.strength;
+  updatePayloadSize(); saveForm();
+};
+$("drop").onclick = () => $("file").click();
+$("drop").onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); $("file").click(); } };
+$("file").onchange = (e) => { addFiles([...e.target.files]); e.target.value = ""; };
+$("addUrl").onclick = () => { const u = $("refUrl").value.trim(); if (u) { addRefSrc(u, u); $("refUrl").value = ""; } };
+for (const ev of ["dragenter", "dragover"]) $("drop").addEventListener(ev, (e) => { e.preventDefault(); $("drop").classList.add("over"); });
+for (const ev of ["dragleave", "drop"]) $("drop").addEventListener(ev, (e) => { e.preventDefault(); $("drop").classList.remove("over"); });
+$("drop").addEventListener("drop", (e) => addFiles([...e.dataTransfer.files]));
+document.addEventListener("paste", (e) => {
+  const files = [...(e.clipboardData?.files || [])].filter((f) => f.type.startsWith("image/"));
+  if (files.length) addFiles(files);
+});
+$("form").addEventListener("input", () => { updatePayloadSize(); saveForm(); });
+$("form").addEventListener("submit", (e) => e.preventDefault());
+
+restoreForm();
+renderSizes();
+renderRefs();
+health();
+setInterval(health, 10000);
+setInterval(() => {
+  const job = jobs.find((j) => j.localId === selectedId);
+  if (job && !FINAL.includes(job.status) && $("elapsed")) $("elapsed").textContent = secs(Date.now() - job.startedAt);
+}, 1000);
+</script>
+</body>
+</html>

@@ -6,6 +6,10 @@ __pycache__
 .venv
 venv
 outputs
+.env
+.env.*
+.cache
+.playwright-mcp
 *.png
 *.jpg
 *.jpeg

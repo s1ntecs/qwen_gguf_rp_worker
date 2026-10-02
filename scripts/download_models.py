@@ -4,6 +4,7 @@ import argparse
 import hashlib
 import os
 import shutil
+import sys
 import tempfile
 from pathlib import Path
 
@@ -57,12 +58,28 @@ def download(
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--repo", required=True)
-    parser.add_argument("--file", required=True)
+    mode = parser.add_mutually_exclusive_group(required=True)
+    mode.add_argument("--repo")
+    mode.add_argument("--builtin-loras", action="store_true",
+                      help="Download all three pinned adapters; --target is their directory")
+    parser.add_argument("--file")
     parser.add_argument("--revision", default="main")
     parser.add_argument("--target", required=True)
     parser.add_argument("--sha256")
     args = parser.parse_args()
+
+    if args.builtin_loras:
+        if args.file or args.sha256 or args.revision != "main":
+            parser.error("Built-in LoRAs use the filenames, revision and checksums in lora_catalog.py")
+        sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+        from lora_catalog import BUILTIN_LORAS, LORA_REPO, LORA_REVISION
+
+        for asset in BUILTIN_LORAS:
+            download(LORA_REPO, asset.filename, LORA_REVISION,
+                     str(Path(args.target) / asset.filename), asset.sha256)
+        return
+    if not args.file:
+        parser.error("--file is required with --repo")
 
     download(
         repo=args.repo,

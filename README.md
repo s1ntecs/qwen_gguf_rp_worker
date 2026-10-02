@@ -12,7 +12,8 @@ The public API is intentionally compact. Clients send prompt/settings/reference 
 - Qwen Image 2.1 BF16 VAE
 - ComfyUI with native Qwen Image 2.1 nodes
 - `leejet/ComfyUI-GGUF` pinned to a Qwen-Image-2.1-capable commit
-- Dynamic model-only LoRA chain from Network Volume
+- Three built-in model-only LoRAs, preloaded into a process-wide GPU cache
+- Additional model-only LoRA chain from Network Volume
 - Viggle Qwen Image 2.1 Turbo v0.2.1, exact 6-step sigma schedule
 - T2I and image editing with up to 10 reference images
 - URL, raw base64 and data-URI inputs
@@ -106,6 +107,7 @@ Instead of `images`, callers may use one of:
 | `reference_resolution` | `1024` | Qwen conditioning resolution |
 | `turbo` | `false` | Enable Viggle v0.2.1 6-step path |
 | `loras` | `[]` | Additional LoRAs by filename/path |
+| `lora_strengths` | `{"nsfw":1,"penis":0,"vagina":0}` | Built-in adapter strengths; omitted keys retain their defaults |
 | `output_format` | `png` | png/jpeg/webp |
 | `quality` | `95` | JPEG/WebP quality |
 
@@ -118,7 +120,13 @@ Instead of `images`, callers may use one of:
   "steps": 25,
   "seed": 42,
   "turbo": false,
-  "loras": []
+  "lora_strengths": {"nsfw": 1.0, "penis": 0.0, "vagina": 0.0},
+  "loras": [
+    {"name": "NSFW Qwen by TheseAlpacas V2.safetensors", "strength": 1.0},
+    {"name": "qwen-image-2.1_penis_coachbate_preview1.safetensors", "strength": 0.0},
+    {"name": "qwen21_v2_000002750.safetensors", "strength": 0.0}
+  ],
+  "model_file": "qwen-image-2.1-Q4_K_M.gguf"
 }
 ```
 
@@ -134,7 +142,46 @@ The key compatibility fields are `images_base64`, `time`, `steps`, and `seed`.
 
 ## LoRA support
 
-LoRAs are applied with ComfyUI's `LoraLoaderModelOnly` after the GGUF model loader.
+### Built-in adapters
+
+All three files from [sintecs/Qwen2.1_loras](https://huggingface.co/sintecs/Qwen2.1_loras/tree/main) are baked into the Docker image:
+
+| Key | File | Default strength |
+|---|---|---:|
+| `nsfw` | `NSFW Qwen by TheseAlpacas V2.safetensors` | 1 |
+| `penis` | `qwen-image-2.1_penis_coachbate_preview1.safetensors` | 0 |
+| `vagina` | `qwen21_v2_000002750.safetensors` | 0 |
+
+The assets are pinned to revision `9181d64c28d06ce05425c741a2e551c0d812ae41`; SHA256 checksums are kept in `lora_catalog.py` and verified at download time.
+
+The `QwenBuiltinLoraStack` custom node loads all three adapters onto the compute device when ComfyUI starts, including those whose default strength is zero. A module-level cache retains their GPU tensors across requests and node instances (CPU only for CPU smoke tests). No per-request downloads, file reads or CPU-to-GPU copies of built-in adapter weights are needed when a strength changes. The adapter tensors occupy about 304 MiB of VRAM. GGUF uses `patch_on_device=true`, and the build patches its mover to support ComfyUI's `WeightAdapter` objects, including Turbo and extra LoRAs. Dynamic GGUF dequantization and LoRA matrix operations still cost time; preloading does not remove those operations. The cache is rebuilt when the worker process restarts.
+
+```json
+{
+  "input": {
+    "prompt": "A cinematic portrait, soft window light",
+    "seed": 42,
+    "turbo": false,
+    "lora_strengths": {"nsfw": 1, "penis": 0.65, "vagina": 0.4}
+  }
+}
+```
+
+Strengths must be finite numbers in `[-4, 4]`. Zero disables an adapter. To test the base without these adapters, explicitly send all three strengths as zero. `loras: []` only clears additional adapters; NSFW still defaults to 1.
+
+For compatibility, a built-in filename supplied through the existing `loras`/`lora` field sets that built-in adapter's strength instead of adding it a second time. Conflicting values in both fields are rejected. The response reports resolved `lora_strengths`, all built-in and additional `loras` (including disabled entries), and `model_file`.
+
+Startup logs contain one `Qwen LoRA preloaded` message per file with its device. On application, `Qwen LoRA applied from device cache` reports the strength and matched model patch count. An active adapter matching no model layers or having unsupported parsed patches raises an error.
+
+Download the same pinned adapters separately if needed:
+
+```bash
+python scripts/download_models.py --builtin-loras --target /runpod-volume/models/loras
+```
+
+### Additional adapters
+
+Additional LoRAs are applied with ComfyUI's `LoraLoaderModelOnly` after the built-in stack.
 
 Place LoRA files on the Network Volume:
 
@@ -173,12 +220,18 @@ Short form:
 In Turbo mode the chain is:
 
 ```text
-GGUF base -> Viggle Turbo LoRA -> custom LoRA 1 -> custom LoRA 2 -> sampler
+GGUF base -> Viggle Turbo LoRA -> built-in LoRAs -> custom LoRA 1 -> custom LoRA 2 -> sampler
 ```
 
 Compatibility still depends on how a LoRA was trained. A LoRA trained for a different Qwen generation/edit family may fail to match keys or produce poor results.
 
-The worker intentionally does not download arbitrary per-request LoRA URLs. Put them on the Network Volume for predictable cold starts and safer operation.
+The worker does not download arbitrary per-request LoRA URLs. Put additional adapters on the Network Volume.
+
+### Comparing image quality
+
+Keep the prompt, reference images, seed, dimensions, steps and CFG identical. Start with `turbo: false` and compare: all built-in strengths zero; NSFW alone at 1; then enable one anatomical adapter at a time. Repeat the same request to distinguish first-generation model loading from steady-state generation time.
+
+The current Q4_K_M model uses the original Qwen Image 2.1 weights, according to [its model card](https://huggingface.co/0xSojalSec/Qwen-Image-2.1-Uncensored-GGUF). Moving to another Q4 quantization of the same base is not an established quality fix. If results remain poor, compare Q4_K_M with Q8_0 using the same settings and adapters; higher precision is a useful diagnostic, not a guarantee of better images. Full image-quality and timing comparisons require a CUDA worker running the rebuilt image.
 
 ## Turbo mode
 
@@ -214,7 +267,7 @@ docker build --platform linux/amd64 -t yourname/qwen21-gguf-runpod:latest .
 docker push yourname/qwen21-gguf-runpod:latest
 ```
 
-The image bakes the base transformer, encoder, VAE and Turbo LoRA so cold workers do not download model weights during paid GPU startup.
+The image bakes the base transformer, encoder, VAE, Turbo LoRA and all three built-in adapters so cold workers do not download model weights during paid GPU startup. Rebuild and deploy the image to activate this feature on an existing endpoint; updating the local test UI alone does not update the remote worker.
 
 To build another GGUF quant:
 
@@ -226,6 +279,15 @@ docker build --platform linux/amd64 \
 ```
 
 Available 0xSojalSec variants currently include Q4_0, Q4_K_M, Q5_K_M, Q6_K and Q8_0. Q4_K_M is the model repository's recommended balance of size and quality.
+
+For a controlled Q8_0 comparison, use its matching checksum:
+
+```bash
+docker build --platform linux/amd64 \
+  --build-arg QWEN_GGUF_FILE=qwen-image-2.1-Q8_0.gguf \
+  --build-arg QWEN_GGUF_SHA256=763ee46b76069d9c54ab26719a0b9222575751560c8bf3a48275736c44351c0e \
+  -t yourname/qwen21-gguf-runpod:q8 .
+```
 
 ## Pinned model/runtime revisions
 
@@ -239,6 +301,7 @@ The Docker build is intentionally reproducible and verifies the large model file
 | leejet/ComfyUI-GGUF | `373048b8403a7820620065210a691263d4da0a61` |
 | Comfy-Org Qwen components | `9a44dbdb47cefd046be9c0a13476192f34c8db8e` |
 | Viggle Turbo | `bb26a0f38e5fe6c124aaccc9187a87eed5d9ed13` |
+| Built-in LoRA repository | `9181d64c28d06ce05425c741a2e551c0d812ae41` |
 
 If you override the GGUF file at build time, also pass the matching `QWEN_GGUF_SHA256`.
 
@@ -313,13 +376,26 @@ For large base64 requests use `/run` plus `/status/<job-id>` instead of `/runsyn
 
 ## Tests
 
-Workflow construction tests do not need a GPU:
+Workflow, handler, downloader and cache tests do not need a GPU. Install the worker's Python dependencies first:
 
 ```bash
+python -m pip install -r requirements.txt
 python -m unittest discover -s tests -v
+node --test tests/test_webui_loras.cjs
 ```
 
-A full integration test requires a CUDA GPU and the built container.
+The cache tests use ComfyUI API doubles to verify preloading, reuse, zero strengths, patch isolation and unmatched-adapter errors. They do not validate GGUF inference or visual quality. A full integration test requires a CUDA GPU and the built container.
+
+## Manual test UI
+
+A local web page for trying prompts, references, turbo and LoRAs against a deployed endpoint:
+
+```bash
+python tools/webui/server.py            # http://127.0.0.1:8787
+python tools/webui/server.py --port 9000 --endpoint <endpoint_id>
+```
+
+The server reads `Authorization_RUNPOD` (or `RUNPOD_API_KEY`) and optionally `RUNPOD_ENDPOINT_ID` from `.env`, listens on loopback only and proxies `/run`, `/status`, `/cancel` and `/health`, so the API key never reaches the browser. Only the Python standard library is required.
 
 ## License
 
