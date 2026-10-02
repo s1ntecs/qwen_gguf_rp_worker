@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from pathlib import PurePosixPath
 from typing import Any, Iterable
 
+from lora_catalog import resolve_lora_settings, validate_strength
+
 
 MAX_REFERENCE_IMAGES = 10
 DEFAULT_WIDTH = 1024
@@ -56,12 +58,10 @@ def normalize_loras(raw: Any) -> list[dict[str, Any]]:
             strength = 1.0
         elif isinstance(item, dict):
             name = safe_lora_name(item.get("name") or item.get("file") or "")
-            strength = float(item.get("strength", item.get("scale", 1.0)))
+            strength = validate_strength(item.get("strength", item.get("scale", 1.0)))
         else:
             raise ValueError("Each LoRA must be a filename or an object")
 
-        if strength < -4.0 or strength > 4.0:
-            raise ValueError("LoRA strength must be between -4 and 4")
         result.append({"name": name, "strength": strength})
     return result
 
@@ -120,6 +120,7 @@ def build_workflow(
     cfg_scale: float = DEFAULT_CFG,
     seed: int = 0,
     loras: list[dict[str, Any]] | None = None,
+    lora_strengths: dict[str, float] | None = None,
     turbo: bool = False,
     reference_resolution: int = 1024,
     model: ModelConfig | None = None,
@@ -127,7 +128,7 @@ def build_workflow(
 ) -> tuple[dict[str, Any], int]:
     model = model or ModelConfig()
     image_names = image_names or []
-    loras = normalize_loras(loras)
+    lora_strengths, loras = resolve_lora_settings(lora_strengths, normalize_loras(loras))
 
     if not isinstance(prompt, str) or not prompt.strip():
         raise ValueError("'prompt' is required")
@@ -161,8 +162,13 @@ def build_workflow(
 
     graph: dict[str, Any] = {
         "model": {
-            "class_type": "UnetLoaderGGUF",
-            "inputs": {"unet_name": model.model_file},
+            "class_type": "UnetLoaderGGUFAdvanced",
+            "inputs": {
+                "unet_name": model.model_file,
+                "dequant_dtype": "default",
+                "patch_dtype": "default",
+                "patch_on_device": True,
+            },
         },
         "clip": {
             "class_type": "CLIPLoader",
@@ -204,6 +210,15 @@ def build_workflow(
             },
         }
         model_ref = ["turbo_lora", 0]
+
+    graph["builtin_loras"] = {
+        "class_type": "QwenBuiltinLoraStack",
+        "inputs": {
+            "model": model_ref,
+            **{f"{key}_strength": strength for key, strength in lora_strengths.items()},
+        },
+    }
+    model_ref = ["builtin_loras", 0]
 
     for index, lora in enumerate(loras, start=1):
         node_id = f"lora_{index}"

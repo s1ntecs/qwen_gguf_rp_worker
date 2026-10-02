@@ -25,6 +25,10 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
       - uses: docker/build-push-action@v6
         with:
           context: .
@@ -33,5 +37,6 @@ jobs:
           tags: |
             ghcr.io/${{ github.repository_owner }}/qwen_gguf_rp_worker:${{ github.ref_name }}
             ghcr.io/${{ github.repository_owner }}/qwen_gguf_rp_worker:latest
+            sintecs/qwen_21_loras_rp_worker:${{ github.ref_name }}
           cache-from: type=gha
           cache-to: type=gha,mode=min,ignore-error=true
